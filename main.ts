@@ -2,6 +2,7 @@
 // Writes a single original roast line (1-200 code points, one line, no
 // trailing newline) to $MAKEFUN_OUTPUT_DIR/entry.txt, then reads it back
 // and verifies it byte-for-byte.
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -29,19 +30,28 @@ function validate(line: string): void {
   if (line !== line.trim()) {
     throw new Error("line must not have leading/trailing whitespace");
   }
+  // The line must name a concrete daily gadget, not a generic complaint.
+  if (!/\b(earbuds|phone|watch|speaker|laptop|tablet|kettle|app)\b/i.test(line)) {
+    throw new Error("line must name the daily gadget it roasts");
+  }
 }
 
 validate(LINE);
 mkdirSync(outDir, { recursive: true });
 writeFileSync(outPath, LINE, "utf8");
 
-// Read back and verify byte-identical output.
-const back = readFileSync(outPath, "utf8");
+// Read back and verify byte-identical output, with no BOM.
+const raw = readFileSync(outPath);
+if (raw.length > 0 && raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf) {
+  throw new Error("entry.txt must not start with a UTF-8 BOM");
+}
+const back = raw.toString("utf8");
 if (back !== LINE) {
   throw new Error("read-back mismatch: entry.txt does not match the line");
 }
 validate(back);
+const sha = createHash("sha256").update(raw).digest("hex");
 console.log(
-  `wrote ${outPath}: ${codePoints(back)} code points, ${Buffer.byteLength(back, "utf8")} bytes`,
+  `wrote ${outPath}: ${codePoints(back)} code points, ${raw.length} bytes, sha256 ${sha}`,
 );
 console.log(back);
